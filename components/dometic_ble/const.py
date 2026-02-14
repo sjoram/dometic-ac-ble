@@ -1,0 +1,8 @@
+CONF_ACTUAL_TEMPERATURE = "actual_temperature"
+CONF_TARGET_TEMPERATURE = "target_temperature"
+CONF_MODE = "mode"
+CONF_FAN = "fan"
+CONF_SLEEP = "sleep"
+CONF_LIGHT = "light"
+CONF_COMPRESSOR = "compressor"
+CONF_STATUS_TEXT = "status_text"
