@@ -2,6 +2,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/ble_client/ble_client.h"
+#include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/select/select.h"
@@ -13,30 +14,40 @@
 namespace esphome {
 namespace dometic_ble {
 
-static const char *SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
-static const char *CHAR_NOTIFY_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
-static const char *CHAR_WRITE_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
+static const char *SERVICE_UUID      = "0000fff0-0000-1000-8000-00805f9b34fb";
+static const char *CHAR_NOTIFY_UUID  = "0000fff1-0000-1000-8000-00805f9b34fb";
+static const char *CHAR_WRITE_UUID   = "0000fff2-0000-1000-8000-00805f9b34fb";
 
 enum DometicMode {
   MODE_COOL = 0,
   MODE_HEAT = 1,
-  MODE_FAN = 2,
+  MODE_FAN  = 2,
   MODE_AUTO = 3,
-  MODE_DRY = 4,
+  MODE_DRY  = 4,
 };
 
 enum DometicFan {
-  FAN_LOW = 1,
+  FAN_LOW    = 1,
   FAN_MEDIUM = 2,
-  FAN_HIGH = 3,
-  FAN_TURBO = 4,
-  FAN_AUTO = 5,
+  FAN_HIGH   = 3,
+  FAN_TURBO  = 4,
+  FAN_AUTO   = 5,
 };
 
-class DometicBLE : public Component, public ble_client::BLEClientNode {
+class DometicBLE : public Component,
+                   public ble_client::BLEClientNode {
  public:
   void setup() override;
   void loop() override;
+
+  // BLE lifecycle hooks (required for 2026+)
+  void gattc_event_handler(
+      esp_gattc_cb_event_t event,
+      esp_gatt_if_t gattc_if,
+      esp_ble_gattc_cb_param_t *param) override;
+
+  void on_connect() override;
+  void on_disconnect() override;
 
   void set_target_temperature(float temp);
   void set_mode(uint8_t mode);
@@ -46,7 +57,7 @@ class DometicBLE : public Component, public ble_client::BLEClientNode {
 
   void set_poll_interval(uint32_t interval) { poll_interval_ = interval; }
 
-  // Entity setters (connected via python side)
+  // Entity pointers (injected by Python codegen)
   sensor::Sensor *actual_temp_sensor{nullptr};
   sensor::Sensor *target_temp_sensor{nullptr};
   sensor::Sensor *compressor_sensor{nullptr};
@@ -70,6 +81,10 @@ class DometicBLE : public Component, public ble_client::BLEClientNode {
   uint32_t last_poll_{0};
   uint32_t poll_interval_{10000};
   uint8_t poll_cycle_{0};
+
+  // Modern BLE requires storing characteristic handles
+  uint16_t notify_handle_{0};
+  uint16_t write_handle_{0};
 };
 
 }  // namespace dometic_ble
