@@ -3,12 +3,12 @@
 #include "esphome/core/helpers.h"
 
 namespace esphome {
-namespace votronic {
+namespace dometic_ac {
 
-static const char *const TAG = "votronic";
-static const char *const TAG_INFO1 = "votronic.i1";
-static const char *const TAG_INFO2 = "votronic.i2";
-static const char *const TAG_INFO3 = "votronic.i3";
+static const char *const TAG = "dometic_ac";
+static const char *const TAG_INFO1 = "dometic_ac.i1";
+static const char *const TAG_INFO2 = "dometic_ac.i2";
+static const char *const TAG_INFO3 = "dometic_ac.i3";
 
 static const uint8_t VOTRONIC_FRAME_START = 0xAA;
 static const uint8_t VOTRONIC_FRAME_LENGTH = 16;
@@ -75,7 +75,7 @@ void Votronic::loop() {
   while (this->available()) {
     uint8_t byte;
     this->read_byte(&byte);
-    if (this->parse_votronic_byte_(byte)) {
+    if (this->parse_dometic_ac_byte_(byte)) {
       this->last_byte_ = now;
     } else {
       ESP_LOGVV(TAG, "Buffer cleared due to reset: %s",
@@ -87,7 +87,7 @@ void Votronic::loop() {
 
 void Votronic::update() {}
 
-bool Votronic::parse_votronic_byte_(uint8_t byte) {
+bool Votronic::parse_dometic_ac_byte_(uint8_t byte) {
   size_t at = this->rx_buffer_.size();
   this->rx_buffer_.push_back(byte);
   const uint8_t *raw = &this->rx_buffer_[0];
@@ -114,13 +114,13 @@ bool Votronic::parse_votronic_byte_(uint8_t byte) {
 
   std::vector<uint8_t> data(this->rx_buffer_.begin(), this->rx_buffer_.begin() + frame_len);
 
-  this->on_votronic_data(data);
+  this->on_dometic_ac_data(data);
 
   // return false to reset buffer
   return false;
 }
 
-void Votronic::on_votronic_data(const std::vector<uint8_t> &data) {
+void Votronic::on_dometic_ac_data(const std::vector<uint8_t> &data) {
   uint8_t data_len = data.size();
   if (data_len != VOTRONIC_FRAME_LENGTH) {
     ESP_LOGW(TAG, "Skipping frame because of invalid length: %d", data_len);
@@ -155,7 +155,7 @@ void Votronic::on_votronic_data(const std::vector<uint8_t> &data) {
       }
     default:
       ESP_LOGW(TAG, "Your device is probably not supported. Please create an issue here: "
-                    "https://github.com/syssi/esphome-votronic/issues");
+                    "https://github.com/syssi/esphome-dometic_ac/issues");
       ESP_LOGW(TAG, "Please provide the following unhandled message data (0x%02X): %s", frame_type,
                format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
   }
@@ -168,7 +168,7 @@ void Votronic::decode_solar_charger_data_(const std::vector<uint8_t> &data) {
   }
   this->last_solar_charger_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -179,12 +179,12 @@ void Votronic::decode_solar_charger_data_(const std::vector<uint8_t> &data) {
   //   0   1  0xAA        Sync Byte
   //   1   1  0x1A        Frame Type
   //   2   2  0xA0 0x05   Battery Voltage                    V    U16 10mV/Bit
-  this->publish_state_(this->battery_voltage_sensor_, votronic_get_16bit(2) * 0.01f);
+  this->publish_state_(this->battery_voltage_sensor_, dometic_ac_get_16bit(2) * 0.01f);
   //   4   2  0xA4 0x06   PV Voltage                         V    U16 10mV/Bit Nur bei MPP-Version
-  float pv_voltage = votronic_get_16bit(4) * 0.01f;
+  float pv_voltage = dometic_ac_get_16bit(4) * 0.01f;
   this->publish_state_(this->pv_voltage_sensor_, pv_voltage);
   //   6   2  0x78 0x00   PV Current                         A    S16 100mA/Bit
-  float pv_current = votronic_get_16bit(6) * 0.1f;
+  float pv_current = dometic_ac_get_16bit(6) * 0.1f;
   this->publish_state_(this->pv_current_sensor_, pv_current);
   this->publish_state_(this->pv_power_sensor_, pv_voltage * pv_current);
   //   8   1  0x00        Reserved
@@ -216,7 +216,7 @@ void Votronic::decode_charger_data_(const std::vector<uint8_t> &data) {
   }
   this->last_charger_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -227,12 +227,12 @@ void Votronic::decode_charger_data_(const std::vector<uint8_t> &data) {
   //   0   1  0xAA        Sync Byte
   //   1   1  0x3A        Frame Type
   //   2   2  0xA0 0x05   Battery Voltage                    V    U16 10mV/Bit
-  float battery_voltage = votronic_get_16bit(2) * 0.01f;
+  float battery_voltage = dometic_ac_get_16bit(2) * 0.01f;
   this->publish_state_(this->battery_voltage_sensor_, battery_voltage);
   //   4   2  0xA4 0x06   Second Battery Voltage             V    U16 10mV/Bit
-  this->publish_state_(this->secondary_battery_voltage_sensor_, votronic_get_16bit(4) * 0.01f);
+  this->publish_state_(this->secondary_battery_voltage_sensor_, dometic_ac_get_16bit(4) * 0.01f);
   //   6   2  0x78 0x00   Charging Current                   A    S16 100mA/Bit
-  float current = (float) ((int16_t) votronic_get_16bit(6)) * 0.1f;
+  float current = (float) ((int16_t) dometic_ac_get_16bit(6)) * 0.1f;
   this->publish_state_(this->charger_current_sensor_, current);
   this->publish_state_(this->charger_power_sensor_, current * battery_voltage);
   this->publish_state_(this->charger_charging_binary_sensor_, (current > 0.0f));
@@ -266,7 +266,7 @@ void Votronic::decode_charging_converter_data_(const std::vector<uint8_t> &data)
   }
   this->last_charger_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -277,12 +277,12 @@ void Votronic::decode_charging_converter_data_(const std::vector<uint8_t> &data)
   //   0   1  0xAA        Sync Byte
   //   1   1  0x3A        Frame Type
   //   2   2  0xA0 0x05   Battery Voltage                    V    U16 10mV/Bit
-  float battery_voltage = votronic_get_16bit(2) * 0.01f;
+  float battery_voltage = dometic_ac_get_16bit(2) * 0.01f;
   this->publish_state_(this->charging_converter_battery_voltage_sensor_, battery_voltage);
   //   4   2  0xA4 0x06   Second Battery Voltage             V    U16 10mV/Bit
-  this->publish_state_(this->charging_converter_secondary_battery_voltage_sensor_, votronic_get_16bit(4) * 0.01f);
+  this->publish_state_(this->charging_converter_secondary_battery_voltage_sensor_, dometic_ac_get_16bit(4) * 0.01f);
   //   6   2  0x78 0x00   Charging Current                   A    S16 100mA/Bit
-  float current = (float) ((int16_t) votronic_get_16bit(6)) * 0.1f;
+  float current = (float) ((int16_t) dometic_ac_get_16bit(6)) * 0.1f;
   this->publish_state_(this->charging_converter_current_sensor_, current);
   this->publish_state_(this->charging_converter_power_sensor_, current * battery_voltage);
   this->publish_state_(this->charging_converter_charging_binary_sensor_, (current > 0.0f));
@@ -319,7 +319,7 @@ void Votronic::decode_battery_computer_info1_data_(const std::vector<uint8_t> &d
   }
   this->last_battery_computer_info1_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -333,19 +333,19 @@ void Votronic::decode_battery_computer_info1_data_(const std::vector<uint8_t> &d
   //   0   1  0xAA        Sync Byte
   //   1   1  0xCA        Frame Type
   //   2   2  0x03 0x05   Battery Voltage
-  float battery_voltage = votronic_get_16bit(2) * 0.01f;
+  float battery_voltage = dometic_ac_get_16bit(2) * 0.01f;
   this->publish_state_(this->battery_voltage_sensor_, battery_voltage);
   //   4   2  0x0F 0x05   Second Battery Voltage
-  this->publish_state_(this->secondary_battery_voltage_sensor_, votronic_get_16bit(4) * 0.01f);
+  this->publish_state_(this->secondary_battery_voltage_sensor_, dometic_ac_get_16bit(4) * 0.01f);
   //   6   2  0xC7 0x01
-  this->publish_state_(this->battery_capacity_remaining_sensor_, votronic_get_16bit(6) * 1.0f);
+  this->publish_state_(this->battery_capacity_remaining_sensor_, dometic_ac_get_16bit(6) * 1.0f);
   //   8   2  0x20 0x00
   ESP_LOGD(TAG_INFO1, "Byte   8-9: 0x%02X 0x%02X / %d %d / %d", data[8], data[9], data[8], data[9],
-           votronic_get_16bit(8));
+           dometic_ac_get_16bit(8));
   //  10   2  0x63 0x00
   this->publish_state_(this->state_of_charge_sensor_, (float) data[10]);
   //  12   2  0x7B 0xFE
-  float current = ((int16_t) votronic_get_16bit(12)) * 0.001f;
+  float current = ((int16_t) dometic_ac_get_16bit(12)) * 0.001f;
   this->publish_state_(this->current_sensor_, current);
   this->publish_state_(this->power_sensor_, current * battery_voltage);
   this->publish_state_(this->charging_binary_sensor_, (current > 0.0f));
@@ -363,7 +363,7 @@ void Votronic::decode_battery_computer_info2_data_(const std::vector<uint8_t> &d
   }
   this->last_battery_computer_info2_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -378,18 +378,18 @@ void Votronic::decode_battery_computer_info2_data_(const std::vector<uint8_t> &d
   //   1   1  0xDA        Frame Type
   //   2   2  0x00 0x00
   ESP_LOGD(TAG_INFO2, "Byte   2-3: 0x%02X 0x%02X / %d %d / %d", data[2], data[3], data[2], data[3],
-           votronic_get_16bit(2));
+           dometic_ac_get_16bit(2));
   //   4   2  0x00 0x00
   ESP_LOGD(TAG_INFO2, "Byte   4-5: 0x%02X 0x%02X / %d %d / %d", data[4], data[5], data[4], data[5],
-           votronic_get_16bit(4));
+           dometic_ac_get_16bit(4));
   //   6   2  0xF8 0x11
-  this->publish_state_(this->battery_nominal_capacity_sensor_, votronic_get_16bit(6) * 0.1f);
+  this->publish_state_(this->battery_nominal_capacity_sensor_, dometic_ac_get_16bit(6) * 0.1f);
   //   8   2  0x5E 0x07
   ESP_LOGD(TAG_INFO2, "Byte   8-9: 0x%02X 0x%02X / %d %d / %d", data[8], data[9], data[8], data[9],
-           votronic_get_16bit(8));
+           dometic_ac_get_16bit(8));
   //  10   2  0x00 0x00
   ESP_LOGD(TAG_INFO2, "Byte 10-11: 0x%02X 0x%02X / %d %d / %d", data[10], data[11], data[10], data[11],
-           votronic_get_16bit(10));
+           dometic_ac_get_16bit(10));
   //  12   1  0x2F        Battery type / Charging mode setting
   //                                         U1     12V system  24V system
   //                        Lead Acid        14.4        24    124
@@ -419,7 +419,7 @@ void Votronic::decode_battery_computer_info3_data_(const std::vector<uint8_t> &d
   }
   this->last_battery_computer_info3_data_ = now;
 
-  auto votronic_get_16bit = [&](size_t i) -> uint16_t {
+  auto dometic_ac_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 0]) << 0);
   };
 
@@ -434,22 +434,22 @@ void Votronic::decode_battery_computer_info3_data_(const std::vector<uint8_t> &d
   //   1   1  0xFA        Frame Type
   //   2   2  0x2F 0x00
   ESP_LOGD(TAG_INFO3, "Byte   2-3: 0x%02X 0x%02X / %d %d / %d", data[2], data[3], data[2], data[3],
-           votronic_get_16bit(2));
+           dometic_ac_get_16bit(2));
   //   4   2  0x00 0x00
   ESP_LOGD(TAG_INFO3, "Byte   4-5: 0x%02X 0x%02X / %d %d / %d", data[4], data[5], data[4], data[5],
-           votronic_get_16bit(4));
+           dometic_ac_get_16bit(4));
   //   6   2  0xD2 0x02
   ESP_LOGD(TAG_INFO3, "Byte   6-7: 0x%02X 0x%02X / %d %d / %d", data[6], data[7], data[6], data[7],
-           votronic_get_16bit(6));
+           dometic_ac_get_16bit(6));
   //   8   2  0x00 0x0A
   ESP_LOGD(TAG_INFO3, "Byte   8-9: 0x%02X 0x%02X / %d %d / %d", data[8], data[9], data[8], data[9],
-           votronic_get_16bit(8));
+           dometic_ac_get_16bit(8));
   //  10   2  0x00 0x00
   ESP_LOGD(TAG_INFO3, "Byte 10-11: 0x%02X 0x%02X / %d %d / %d", data[10], data[11], data[10], data[11],
-           votronic_get_16bit(10));
+           dometic_ac_get_16bit(10));
   //  12   2  0x28 0xD0
   ESP_LOGD(TAG_INFO3, "Byte 12-13: 0x%02X 0x%02X / %d %d / %d", data[12], data[13], data[12], data[13],
-           votronic_get_16bit(12));
+           dometic_ac_get_16bit(12));
   //  14   1  0x00
   ESP_LOGD(TAG_INFO3, "Byte    14: 0x%02X / %d", data[14], data[14]);
   //  15   1  0xF7        CRC
@@ -664,5 +664,5 @@ std::string Votronic::charger_status_bitmask_to_string_(const uint8_t mask) {
   return errors_list;
 }
 
-}  // namespace votronic
+}  // namespace dometic_ac
 }  // namespace esphome
