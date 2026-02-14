@@ -14,21 +14,19 @@ void DometicBLE::loop() {
   if (!this->parent()->connected())
     return;
 
-  // Handle queued BLE writes
   if (!write_queue_.empty() && !write_in_progress_) {
     send_next_command_();
   }
 
-  // Poll scheduler
   if (millis() - last_poll_ > poll_interval_) {
     last_poll_ = millis();
 
     switch (poll_cycle_) {
-      case 0: poll_register_(10); break; // actual temp
-      case 1: poll_register_(4); break;  // target temp
-      case 2: poll_register_(3); break;  // mode
-      case 3: poll_register_(2); break;  // fan
-      case 4: poll_register_(27); break; // sleep
+      case 0: poll_register_(10); break;
+      case 1: poll_register_(4);  break;
+      case 2: poll_register_(3);  break;
+      case 3: poll_register_(2);  break;
+      case 4: poll_register_(27); break;
     }
 
     poll_cycle_ = (poll_cycle_ + 1) % 5;
@@ -42,185 +40,30 @@ void DometicBLE::gattc_event_handler(
 
   switch (event) {
 
-    case ESP_GATTC_OPEN_EVT: {
+    case ESP_GATTC_OPEN_EVT:
       ESP_LOGI(TAG, "Connected to Dometic AC");
-
-      // Discover write characteristic
-      auto *write_char = this->parent()->get_characteristic(
-          SERVICE_UUID, CHAR_WRITE_UUID);
-      if (write_char != nullptr) {
-        write_handle_ = write_char->handle;
-        ESP_LOGI(TAG, "Found write characteristic");
-      } else {
-        ESP_LOGE(TAG, "Write characteristic not found!");
-      }
-
-      // Discover notify characteristic
-      auto *notify_char = this->parent()->get_characteristic(
-          SERVICE_UUID, CHAR_NOTIFY_UUID);
-      if (notify_char != nullptr) {
-        notify_handle_ = notify_char->handle;
-        this->parent()->register_for_notify(notify_handle_);
-        ESP_LOGI(TAG, "Found notify characteristic");
-      } else {
-        ESP_LOGE(TAG, "Notify characteristic not found!");
-      }
-
-      break;
-    }
-
-    case ESP_GATTC_DISCONNECT_EVT:
-      ESP_LOGW(TAG, "Disconnected from Dometic AC");
       break;
 
-    case ESP_GATTC_NOTIFY_EVT:
-      process_packet_(param->notify.value,
-                      param->notify.value_len);
-      break;
+    case ESP_GATTC_SEARCH_CMPL_EVT: {
+      ESP_LOGI(TAG, "Service discovery complete");
 
-    default:
-      break;
-  }
-}
+      for (auto &service : this->parent()->services()) {
 
+        if (service.uuid.to_string() == SERVICE_UUID) {
 
-void DometicBLE::queue_command_(std::vector<uint8_t> cmd) {
-  write_queue_.push(cmd);
-}
+          for (auto &chr : service.characteristics) {
 
-void DometicBLE::send_next_command_() {
-  if (write_queue_.empty() || write_handle_ == 0)
-    return;
+            std::string uuid = chr.uuid.to_string();
 
-  auto cmd = write_queue_.front();
-  write_queue_.pop();
+            if (uuid == CHAR_WRITE_UUID) {
+              write_handle_ = chr.handle;
+              ESP_LOGI(TAG, "Found write characteristic");
+            }
 
-  write_in_progress_ = true;
-
-  this->parent()->write(
-      write_handle_,
-      cmd.data(),
-      cmd.size(),
-      false   // set true if AC requires response
-  );
-
-  write_in_progress_ = false;
-}
-
-void DometicBLE::poll_register_(uint8_t reg) {
-  std::vector<uint8_t> cmd = {0xAA, reg, 0x00, 0x00};
-  queue_command_(cmd);
-}
-
-float DometicBLE::decode_temp_(uint8_t low, uint8_t high) {
-  int16_t raw = (int16_t)(low | (high << 8));
-  return raw / 1000.0f;
-}
-
-void DometicBLE::process_packet_(const uint8_t *data, uint16_t length) {
-  if (length < 7)
-    return;
-
-  uint8_t reg = data[1];
-
-  switch (reg) {
-
-    case 10: { // actual temperature
-      float temp = decode_temp_(data[5], data[6]);
-      if (actual_temp_sensor)
-        actual_temp_sensor->publish_state(temp);
-      break;
-    }
-
-    case 4: { // target temperature
-      float temp = decode_temp_(data[5], data[6]);
-      if (target_temp_sensor)
-        target_temp_sensor->publish_state(temp);
-      break;
-    }
-
-    case 3: { // mode
-      uint8_t mode = data[5];
-      if (mode_select)
-        mode_select->publish_state(std::to_string(mode));
-      break;
-    }
-
-    case 2: { // fan
-      uint8_t fan = data[5];
-      if (fan_select)
-        fan_select->publish_state(std::to_string(fan));
-      break;
-    }
-
-    case 1: { // compressor
-      bool running = data[5] & 0x01;
-      if (compressor_sensor)
-        compressor_sensor->publish_state(running);
-      break;
-    }
-
-    case 27: { // sleep
-      bool sleep = data[5];
-      if (sleep_switch)
-        sleep_switch->publish_state(sleep);
-      break;
-    }
-
-    case 28: { // light
-      bool light = data[5];
-      if (light_switch)
-        light_switch->publish_state(light);
-      break;
-    }
-
-    case 29: { // error/status (fixed duplicate!)
-      uint8_t err = data[5];
-      if (!status_text) break;
-
-      switch (err) {
-        case 0: status_text->publish_state("OK"); break;
-        case 1: status_text->publish_state("Low Voltage"); break;
-        case 2: status_text->publish_state("Sensor Fault"); break;
-        default: status_text->publish_state("Unknown Error");
-      }
-      break;
-    }
-
-    default:
-      break;
-  }
-}
-
-void DometicBLE::set_target_temperature(float temp) {
-  int16_t raw = temp * 1000;
-  std::vector<uint8_t> cmd = {
-      0xAA, 4, 0x02,
-      (uint8_t)(raw & 0xFF),
-      (uint8_t)((raw >> 8) & 0xFF)
-  };
-  queue_command_(cmd);
-}
-
-void DometicBLE::set_mode(uint8_t mode) {
-  std::vector<uint8_t> cmd = {0xAA, 3, 0x01, mode};
-  queue_command_(cmd);
-}
-
-void DometicBLE::set_fan(uint8_t fan) {
-  std::vector<uint8_t> cmd = {0xAA, 2, 0x01, fan};
-  queue_command_(cmd);
-}
-
-void DometicBLE::set_sleep(bool state) {
-  std::vector<uint8_t> cmd = {0xAA, 27, 0x01, (uint8_t)state};
-  queue_command_(cmd);
-}
-
-void DometicBLE::set_light(bool state) {
-  std::vector<uint8_t> cmd = {0xAA, 28, 0x01, (uint8_t)state};
-  queue_command_(cmd);
-}
-
-}  // namespace dometic_ble
-}  // namespace esphome
+            if (uuid == CHAR_NOTIFY_UUID) {
+              notify_handle_ = chr.handle;
+              this->parent()->register_for_notify(notify_handle_);
+              ESP_LOGI(TAG, "Found notify characteristic");
+            }
+          }
+        }
