@@ -10,35 +10,6 @@ void DometicBLE::setup() {
   ESP_LOGI(TAG, "Setting up Dometic BLE client...");
 }
 
-void DometicBLE::on_connect() {
-  ESP_LOGI(TAG, "Connected to Dometic AC");
-
-  // Discover write characteristic
-  auto *write_char = this->parent()->get_characteristic(
-      SERVICE_UUID, CHAR_WRITE_UUID);
-  if (write_char != nullptr) {
-    write_handle_ = write_char->handle;
-    ESP_LOGI(TAG, "Found write characteristic");
-  } else {
-    ESP_LOGE(TAG, "Write characteristic not found!");
-  }
-
-  // Discover notify characteristic
-  auto *notify_char = this->parent()->get_characteristic(
-      SERVICE_UUID, CHAR_NOTIFY_UUID);
-  if (notify_char != nullptr) {
-    notify_handle_ = notify_char->handle;
-    this->parent()->register_for_notify(notify_handle_);
-    ESP_LOGI(TAG, "Found notify characteristic");
-  } else {
-    ESP_LOGE(TAG, "Notify characteristic not found!");
-  }
-}
-
-void DometicBLE::on_disconnect() {
-  ESP_LOGW(TAG, "Disconnected from Dometic AC");
-}
-
 void DometicBLE::loop() {
   if (!this->parent()->is_connected())
     return;
