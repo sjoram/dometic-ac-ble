@@ -7,7 +7,7 @@
 #include "esphome/components/uart/uart.h"
 
 namespace esphome {
-namespace votronic {
+namespace dometic_ac {
 
 class Votronic : public uart::UARTDevice, public PollingComponent {
  public:
@@ -187,7 +187,7 @@ class Votronic : public uart::UARTDevice, public PollingComponent {
     charging_converter_controller_status_text_sensor_ = charging_converter_controller_status_text_sensor;
   }
 
-  void on_votronic_data(const std::vector<uint8_t> &data);
+  void on_dometic_ac_data(const std::vector<uint8_t> &data);
   void set_throttle(uint32_t throttle) { this->throttle_ = throttle; }
   void set_rx_timeout(uint16_t rx_timeout) { rx_timeout_ = rx_timeout; }
 
@@ -276,7 +276,7 @@ class Votronic : public uart::UARTDevice, public PollingComponent {
   void decode_battery_computer_info1_data_(const std::vector<uint8_t> &data);
   void decode_battery_computer_info2_data_(const std::vector<uint8_t> &data);
   void decode_battery_computer_info3_data_(const std::vector<uint8_t> &data);
-  bool parse_votronic_byte_(uint8_t byte);
+  bool parse_dometic_ac_byte_(uint8_t byte);
   void publish_state_(binary_sensor::BinarySensor *binary_sensor, const bool &state);
   void publish_state_(sensor::Sensor *sensor, float value);
   void publish_state_(text_sensor::TextSensor *text_sensor, const std::string &state);
@@ -295,5 +295,5 @@ class Votronic : public uart::UARTDevice, public PollingComponent {
   }
 };
 
-}  // namespace votronic
+}  // namespace dometic_ac
 }  // namespace esphome
