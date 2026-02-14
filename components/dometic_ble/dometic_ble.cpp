@@ -121,4 +121,3 @@ float DometicBLE::decode_temp_(uint8_t low, uint8_t high) {
   int16_t raw = (int16_t)(low | (high << 8));
   return raw / 1000.0f;
 }
-
