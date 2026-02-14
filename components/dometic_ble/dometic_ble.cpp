@@ -10,8 +10,36 @@ void DometicBLE::setup() {
   ESP_LOGI(TAG, "Setting up Dometic BLE client...");
 }
 
-void DometicBLE::loop() {
+void DometicBLE::on_connect() {
+  ESP_LOGI(TAG, "Connected to Dometic AC");
 
+  // Discover write characteristic
+  auto *write_char = this->parent()->get_characteristic(
+      SERVICE_UUID, CHAR_WRITE_UUID);
+  if (write_char != nullptr) {
+    write_handle_ = write_char->handle;
+    ESP_LOGI(TAG, "Found write characteristic");
+  } else {
+    ESP_LOGE(TAG, "Write characteristic not found!");
+  }
+
+  // Discover notify characteristic
+  auto *notify_char = this->parent()->get_characteristic(
+      SERVICE_UUID, CHAR_NOTIFY_UUID);
+  if (notify_char != nullptr) {
+    notify_handle_ = notify_char->handle;
+    this->parent()->register_for_notify(notify_handle_);
+    ESP_LOGI(TAG, "Found notify characteristic");
+  } else {
+    ESP_LOGE(TAG, "Notify characteristic not found!");
+  }
+}
+
+void DometicBLE::on_disconnect() {
+  ESP_LOGW(TAG, "Disconnected from Dometic AC");
+}
+
+void DometicBLE::loop() {
   if (!this->parent()->is_connected())
     return;
 
@@ -36,22 +64,35 @@ void DometicBLE::loop() {
   }
 }
 
+void DometicBLE::gattc_event_handler(
+    esp_gattc_cb_event_t event,
+    esp_gatt_if_t gattc_if,
+    esp_ble_gattc_cb_param_t *param) {
+
+  if (event == ESP_GATTC_NOTIFY_EVT) {
+    process_packet_(param->notify.value,
+                    param->notify.value_len);
+  }
+}
+
 void DometicBLE::queue_command_(std::vector<uint8_t> cmd) {
   write_queue_.push(cmd);
 }
 
 void DometicBLE::send_next_command_() {
-  if (write_queue_.empty()) return;
+  if (write_queue_.empty() || write_handle_ == 0)
+    return;
 
   auto cmd = write_queue_.front();
   write_queue_.pop();
 
   write_in_progress_ = true;
 
-  this->parent()->write_gatt_char(
-      SERVICE_UUID,
-      CHAR_WRITE_UUID,
-      cmd
+  this->parent()->write(
+      write_handle_,
+      cmd.data(),
+      cmd.size(),
+      false   // set true if AC requires response
   );
 
   write_in_progress_ = false;
@@ -68,7 +109,8 @@ float DometicBLE::decode_temp_(uint8_t low, uint8_t high) {
 }
 
 void DometicBLE::process_packet_(const uint8_t *data, uint16_t length) {
-  if (length < 7) return;
+  if (length < 7)
+    return;
 
   uint8_t reg = data[1];
 
@@ -123,10 +165,10 @@ void DometicBLE::process_packet_(const uint8_t *data, uint16_t length) {
       break;
     }
 
-/*    case 0x1C: { // error/status
+    case 29: { // error/status (fixed duplicate!)
       uint8_t err = data[5];
       if (!status_text) break;
-*/
+
       switch (err) {
         case 0: status_text->publish_state("OK"); break;
         case 1: status_text->publish_state("Low Voltage"); break;
@@ -144,9 +186,9 @@ void DometicBLE::process_packet_(const uint8_t *data, uint16_t length) {
 void DometicBLE::set_target_temperature(float temp) {
   int16_t raw = temp * 1000;
   std::vector<uint8_t> cmd = {
-    0xAA, 4, 0x02,
-    (uint8_t)(raw & 0xFF),
-    (uint8_t)((raw >> 8) & 0xFF)
+      0xAA, 4, 0x02,
+      (uint8_t)(raw & 0xFF),
+      (uint8_t)((raw >> 8) & 0xFF)
   };
   queue_command_(cmd);
 }
@@ -162,12 +204,12 @@ void DometicBLE::set_fan(uint8_t fan) {
 }
 
 void DometicBLE::set_sleep(bool state) {
-  std::vector<uint8_t> cmd = {0xAA, 27, 0x01, state};
+  std::vector<uint8_t> cmd = {0xAA, 27, 0x01, (uint8_t)state};
   queue_command_(cmd);
 }
 
 void DometicBLE::set_light(bool state) {
-  std::vector<uint8_t> cmd = {0xAA, 28, 0x01, state};
+  std::vector<uint8_t> cmd = {0xAA, 28, 0x01, (uint8_t)state};
   queue_command_(cmd);
 }
 
