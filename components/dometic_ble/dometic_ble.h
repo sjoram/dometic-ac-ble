@@ -46,10 +46,8 @@ class DometicBLE : public Component,
       esp_gatt_if_t gattc_if,
       esp_ble_gattc_cb_param_t *param) override;
 
-  void on_connect() override;
-  void on_disconnect() override;
 
-  void set_target_temperature(float temp);
+void set_target_temperature(float temp);
   void set_mode(uint8_t mode);
   void set_fan(uint8_t fan);
   void set_sleep(bool state);
