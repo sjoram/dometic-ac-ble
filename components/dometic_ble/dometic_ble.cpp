@@ -40,11 +40,49 @@ void DometicBLE::gattc_event_handler(
     esp_gatt_if_t gattc_if,
     esp_ble_gattc_cb_param_t *param) {
 
-  if (event == ESP_GATTC_NOTIFY_EVT) {
-    process_packet_(param->notify.value,
-                    param->notify.value_len);
+  switch (event) {
+
+    case ESP_GATTC_OPEN_EVT: {
+      ESP_LOGI(TAG, "Connected to Dometic AC");
+
+      // Discover write characteristic
+      auto *write_char = this->parent()->get_characteristic(
+          SERVICE_UUID, CHAR_WRITE_UUID);
+      if (write_char != nullptr) {
+        write_handle_ = write_char->handle;
+        ESP_LOGI(TAG, "Found write characteristic");
+      } else {
+        ESP_LOGE(TAG, "Write characteristic not found!");
+      }
+
+      // Discover notify characteristic
+      auto *notify_char = this->parent()->get_characteristic(
+          SERVICE_UUID, CHAR_NOTIFY_UUID);
+      if (notify_char != nullptr) {
+        notify_handle_ = notify_char->handle;
+        this->parent()->register_for_notify(notify_handle_);
+        ESP_LOGI(TAG, "Found notify characteristic");
+      } else {
+        ESP_LOGE(TAG, "Notify characteristic not found!");
+      }
+
+      break;
+    }
+
+    case ESP_GATTC_DISCONNECT_EVT:
+      ESP_LOGW(TAG, "Disconnected from Dometic AC");
+      break;
+
+    case ESP_GATTC_NOTIFY_EVT:
+      process_packet_(param->notify.value,
+                      param->notify.value_len);
+      break;
+
+    default:
+      break;
   }
 }
+
 
 void DometicBLE::queue_command_(std::vector<uint8_t> cmd) {
   write_queue_.push(cmd);
