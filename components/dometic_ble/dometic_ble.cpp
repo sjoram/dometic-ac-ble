@@ -11,7 +11,7 @@ void DometicBLE::setup() {
 }
 
 void DometicBLE::loop() {
-  if (!this->parent()->is_connected())
+  if (!this->parent()->connected())
     return;
 
   // Handle queued BLE writes
