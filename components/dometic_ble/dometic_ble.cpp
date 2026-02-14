@@ -12,7 +12,7 @@ void DometicBLE::setup() {
 
 void DometicBLE::loop() {
 
-  if (!this->node_state == espbt::ClientState::ESTABLISHED)
+  if (!this->parent()->is_connected())
     return;
 
   // Handle queued BLE writes
@@ -123,10 +123,10 @@ void DometicBLE::process_packet_(const uint8_t *data, uint16_t length) {
       break;
     }
 
-    case 0x1C: { // error/status
+/*    case 0x1C: { // error/status
       uint8_t err = data[5];
       if (!status_text) break;
-
+*/
       switch (err) {
         case 0: status_text->publish_state("OK"); break;
         case 1: status_text->publish_state("Low Voltage"); break;
